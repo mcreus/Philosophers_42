@@ -1,10 +1,11 @@
 NAME	=	philo
 
-SRC	=	action.c init.c main.c time.c philosophers_utils.c routine.c
+SRC	=	action.c main.c init.c philo_utils.c philo_utils2.c \
+		routine.c time.c
 
-OBJS	=	$(SRC:%.c=%.o)
+OBJS	=	$(SRC:.c=.o)
 
-CC	=	gcc -pthread
+CC	=	gcc
 CFLAGS	=	-Wall -Wextra -Werror
 RM	=	rm -rf
 
@@ -12,7 +13,7 @@ all: $(NAME)
 
 $(NAME): $(OBJS) ./philosophers.h
 		@echo "\033[0;33m\nCOMPILING PHILOSOPHERS......\n"
-		@$(CC) $(CFLAGS) $(OBJS) -o $(NAME)
+		@$(CC) $(CFLAGS) $(OBJS) -o $(NAME) -lpthread
 		@echo "\033[1;32m\nPHILOSOPERS CREATED\n"
 
 clean:

@@ -3,123 +3,90 @@
 /*                                                        :::      ::::::::   */
 /*   init.c                                             :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: mcreus <marvin@42.fr>                      +#+  +:+       +#+        */
+/*   By: mcreus <mcreus@student.42perpignan.fr>     +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2023/05/23 17:07:07 by mcreus            #+#    #+#             */
-/*   Updated: 2023/05/31 15:49:40 by mcreus           ###   ########.fr       */
+/*   Updated: 2023/06/22 13:49:16 by mcreus           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "philosophers.h"
 
-int	just_one_philo(t_philos *philos)
+int	check_error(int ac, char **av)
 {
-	if (philos->args.number_of_philosophers == 1)
-	{
-		philos->time = get_time();
-		if (pthread_create(&(philos->philos), NULL, &routine_for_one, philos))
-		{
-			pthread_mutex_lock(philos->message);
-			printf("philosopher %d was not created...\n", 1);
-			return (0);
-		}
-		return (0);
-	}
-	return (1);
-}
-
-int	start_philos(t_philos *philosophers)
-{
-	int	i;
+	int		i;
+	int		j;
+	long	n;
 
 	i = 0;
-	if (!just_one_philo(philosophers))
-		return (0);
-	while (i < philosophers->args.number_of_philosophers)
+	while (++i < ac)
 	{
-		philosophers[i].time = get_time();
-		philosophers[i].time_of_last_eat = philosophers[i].time;
-		if (pthread_create(&((philosophers[i]).philos), NULL, &routine,
-				&philosophers[i]) || pthread_detach(philosophers[i].philos))
+		n = long_atoi(av[i]);
+		if (n > 2147483647 || n == 0)
+			return (-1);
+		j = -1;
+		while (av[i][++j])
 		{
-			pthread_mutex_lock(philosophers->message);
-			printf("philosopher %d was not created.\n", i + 1);
-			return (1);
+			if (!ft_isdigit(av[i][j]))
+				return (-1);
 		}
-		i++;
 	}
 	return (0);
 }
 
-int	init_philos(t_philos *philos, t_arg philo)
+int	init_info(int ac, char **av, t_arg *args)
+{
+	if (check_error(ac, av) == -1)
+		return (-1);
+	args->number_of_philosophers = (int)long_atoi(av[1]);
+	args->time_to_die = (unsigned int)long_atoi(av[2]);
+	args->time_to_eat = (unsigned int)long_atoi(av[3]);
+	args->time_to_sleep = (unsigned int)long_atoi(av[4]);
+	if (ac == 6)
+		args->number_of_eat = (int)long_atoi(av[5]);
+	else
+		args->number_of_eat = -1;
+	args->stop = 0;
+	pthread_mutex_init(&args->m_stop, NULL);
+	pthread_mutex_init(&args->m_message, NULL);
+	pthread_mutex_init(&args->m_last_eat, NULL);
+	return (0);
+}
+
+void	init_philos(t_philos *philos, t_arg *args)
 {
 	int	i;
 
 	i = 0;
-	philos->check_die = (int *)malloc(sizeof(int));
-	philos->count_eat = (int *)malloc(sizeof(int));
-	if (philos->check_die == NULL || philos->count_eat == NULL)
-		return (write(1, "not allocated memory\n", 21));
-	philos->check_die[0] = 1;
-	philos->count_eat[0] = 0;
-	while (i < philo.number_of_philosophers)
+	while (i < args->number_of_philosophers)
 	{
-		philos[i].args = philo;
+		philos[i].args = args;
 		philos[i].identity = i + 1;
-		philos[i].check_die = philos[0].check_die;
-		philos[i].count_eat = philos[0].count_eat;
+		philos[i].n = args->number_of_philosophers;
+		philos[i].count = 0;
+		philos[i].stop = 0;
+		philos[i].time_die = args->time_to_die;
+		philos[i].time_eat = args->time_to_eat;
+		philos[i].time_sleep = args->time_to_sleep;
+		philos[i].number_eat = args->number_of_eat;
 		i++;
 	}
-	if (init_forks(philos) || init_mutex(philos))
-		return (1);
-	return (0);
 }
 
-int	init_forks(t_philos *philos)
+void	take_forks(t_philos *philos, pthread_mutex_t *forks, int n)
 {
 	int	i;
 
-	i = 0;
-	while (i < philos->args.number_of_philosophers)
+	pthread_mutex_init(&forks[0], NULL);
+	philos[0].left_fork = &forks[0];
+	philos[0].right_fork = NULL;
+	philos[0].right_fork = &forks[n - 1];
+	i = 1;
+	while (i < n)
 	{
-		philos[i].left_fork = (pthread_mutex_t *)malloc(sizeof(pthread_mutex_t));
-		if (philos[i].left_fork == NULL)
-			return (write(1, "not allocated memory\n", 21));
-		pthread_mutex_init(philos[i].left_fork, NULL);
+		pthread_mutex_init(&forks[i], NULL);
+		philos[i].left_fork = &forks[i];
+		philos[i].right_fork = &forks[i - 1];
 		i++;
 	}
-	i = 0;
-	while (i < philos->args.number_of_philosophers)
-	{
-		if (i == 0)
-			philos[i].right_fork
-				= philos[philos->args.number_of_philosophers - 1].left_fork;
-		else
-			philos[i].right_fork = philos[i - 1].left_fork;
-		i++;
-	}
-	return (0);
-}
-
-int	init_mutex(t_philos *philos)
-{
-	int	i;
-
-	i = 0;
-	philos->message = (pthread_mutex_t *)malloc(sizeof(pthread_mutex_t));
-	philos->die = (pthread_mutex_t *)malloc(sizeof(pthread_mutex_t));
-	philos->eat = (pthread_mutex_t *)malloc(sizeof(pthread_mutex_t));
-	if (philos->message == NULL || philos->die == NULL || philos->eat == NULL)
-		return (write(1, "not allocated memory\n", 21));
-	pthread_mutex_init(philos->message, NULL);
-	pthread_mutex_init(philos->die, NULL);
-	pthread_mutex_init(philos->eat, NULL);
-	while (i < philos->args.number_of_philosophers)
-	{
-		philos[i].message = philos->message;
-		philos[i].die = philos->die;
-		philos[i].eat = philos->eat;
-		i++;
-	}
-	return (0);
 }

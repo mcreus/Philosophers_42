@@ -3,77 +3,96 @@
 /*                                                        :::      ::::::::   */
 /*   routine.c                                          :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: mcreus <marvin@42.fr>                      +#+  +:+       +#+        */
+/*   By: mcreus <mcreus@student.42perpignan.fr>     +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2023/05/30 15:49:10 by mcreus            #+#    #+#             */
-/*   Updated: 2023/05/30 17:00:59 by mcreus           ###   ########.fr       */
+/*   Updated: 2023/06/22 14:01:38 by mcreus           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "philosophers.h"
 
-void	ft_usleep(int time_to_sleep, long long exec_time, t_philos *philos)
+void	*is_dead(void *arg)
 {
-	while (1)
+	t_philos	*philo;
+	int			stop;
+
+	philo = (t_philos *)arg;
+	stop = 0;
+	while (!stop)
 	{
-		usleep(50);
-		if (philos)
-			check_time_to_die(philos);
-		if ((get_time() - exec_time) >= time_to_sleep)
-			break ;
+		pthread_mutex_lock(&philo->args->m_last_eat);
+		if (get_time() - philo->time_to_last_eat >= philo->time_die)
+		{
+			pthread_mutex_unlock(&philo->args->m_last_eat);
+			pthread_mutex_lock(&philo->args->m_message);
+			print_status(philo, "died");
+			pthread_mutex_unlock(&philo->args->m_message);
+		}
+		else
+			pthread_mutex_unlock(&philo->args->m_last_eat);
+		pthread_mutex_lock(&philo->args->m_stop);
+		stop = philo->args->stop + philo->stop;
+		pthread_mutex_unlock(&philo->args->m_stop);
 	}
-}
-
-void	*routine_for_one(void *args)
-{
-	t_philos	*philos;
-
-	philos = (t_philos *)args;
-	pthread_mutex_lock(philos->message);
-	pthread_mutex_lock(philos->left_fork);
-	printf("%lldms philo %d has taken a fork\n", (get_time() - philos->time),
-		philos->identity);
-	ft_usleep(philos->args.time_to_die, get_time(), NULL);
-	pthread_mutex_lock(philos->die);
-	*(philos->check_die) = 0;
-	printf("%lldms philo %d died \n", (get_time() - philos->time),
-		philos->identity);
-	pthread_mutex_unlock(philos->die);
 	return (NULL);
 }
 
-void	*routine(void *args)
+void	*routine(void *arg)
 {
-	t_philos	*philos;
+	t_philos	*philo;
+	int			stop;
 
-	philos = (t_philos *)args;
-	if (philos->identity % 2 == 0)
-		ft_usleep(30, get_time(), NULL);
-	while (1)
+	philo = (t_philos *)arg;
+	philo->time_to_last_eat = philo->args->t_start;
+	if (pthread_create(&philo->the_die, NULL, &is_dead, philo))
+		perror("pthread_created failure");
+	stop = 0;
+	while (!stop)
 	{
-		check_time_to_die(philos);
-		take_left_fork(philos);
-		take_right_fork(philos);
-		if (!is_eating(philos))
-			break ;
-		is_sleeping(philos);
-		is_thinking(philos);
+		activity(philo);
+		pthread_mutex_lock(&philo->args->m_stop);
+		stop = philo->args->stop + philo->stop;
+		pthread_mutex_unlock(&philo->args->m_stop);
 	}
-	pthread_mutex_lock(philos->eat);
-	*(philos->count_eat) += 1;
-	pthread_mutex_unlock(philos->eat);
+	if (pthread_join(philo->the_die, NULL))
+		perror("Pthread_join failure");
 	return (NULL);
 }
 
-void	check_time_to_die(t_philos *philos)
+void	destroy_mutex(t_arg *args, pthread_mutex_t *forks)
 {
-	if ((get_time() - philos->time_of_last_eat) >= philos->args.time_to_die)
+	int	i;
+
+	i = 0;
+	while (i < args->number_of_philosophers)
 	{
-		pthread_mutex_lock(philos->message);
-		pthread_mutex_lock(philos->die);
-		*(philos->check_die) = 0;
-		printf("%lldms philo %d died\n", (get_time() - philos->time),
-			philos->identity);
-		pthread_mutex_unlock(philos->die);
+		pthread_mutex_destroy(&forks[i]);
+		i++;
 	}
+	pthread_mutex_destroy(&args->m_last_eat);
+	pthread_mutex_destroy(&args->m_message);
+	pthread_mutex_destroy(&args->m_stop);
+}
+
+int	init_thread(t_philos *philo, t_arg *args, pthread_t *thread)
+{
+	int	i;
+
+	i = 0;
+	args->t_start = get_time();
+	while (i < args->number_of_philosophers)
+	{
+		if (pthread_create(&thread[i], NULL, &routine, &philo[i]))
+			perror("pthread_create failure");
+		i++;
+	}
+	i = 0;
+	while (i < args->number_of_philosophers)
+	{
+		if (pthread_join(thread[i], NULL))
+			perror("pthread_join failure");
+		i++;
+	}
+	return (0);
 }

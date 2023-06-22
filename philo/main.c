@@ -3,71 +3,77 @@
 /*                                                        :::      ::::::::   */
 /*   main.c                                             :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: mcreus <marvin@42.fr>                      +#+  +:+       +#+        */
+/*   By: mcreus <mcreus@student.42perpignan.fr>     +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2023/05/23 15:35:11 by mcreus            #+#    #+#             */
-/*   Updated: 2023/05/31 16:09:40 by mcreus           ###   ########.fr       */
+/*   Updated: 2023/06/22 15:33:56 by mcreus           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "philosophers.h"
 
-void	ft_free(t_philos *philos)
+void	ft_free(t_philos *philos, pthread_t *thread, pthread_mutex_t *forks)
 {
-	int		i;
-
-	i = 0;
-	pthread_mutex_destroy(philos[i].eat);
-	pthread_mutex_destroy(philos[i].message);
-	pthread_mutex_destroy(philos[i].die);
-	while (i < philos->args.number_of_philosophers)
+	if (philos)
 	{
-		pthread_mutex_destroy(philos[i].left_fork);
-		free(philos[i].left_fork);
-		i++;
+		free(philos);
+		philos = NULL;
 	}
-	free(philos->message);
-	free(philos->die);
-	free(philos->eat);
-	free(philos->check_die);
-	free(philos->count_eat);
-	free(philos);
+	if (thread)
+	{
+		free(thread);
+		thread = NULL;
+	}
+	if (forks)
+	{
+		free(forks);
+		forks = NULL;
+	}
 }
 
-void	wait_philos(t_philos *philos, int nb_of_eat)
+int	malloc_error(t_philos *philos, pthread_t *thread, pthread_mutex_t *forks)
 {
-	while (1)
-	{
-		pthread_mutex_lock(philos->die);
-		if (!*(philos->check_die))
-			break ;
-		pthread_mutex_unlock(philos->die);
-		pthread_mutex_lock(philos->eat);
-		if (*(philos->count_eat) == nb_of_eat)
-			break ;
-		pthread_mutex_unlock(philos->eat);
-		usleep(50);
-	}
+	ft_free(philos, thread, forks);
+	perror("philo");
+	return (-1);
+}
+
+int	malloc_str(t_philos **philos, pthread_t **thread,
+		pthread_mutex_t **forks, int n)
+{
+	*philos = malloc(sizeof(t_philos) * n);
+	if (!*philos)
+		return (malloc_error(*philos, *thread, *forks));
+	*thread = malloc(sizeof(pthread_t) * n);
+	if (!*thread)
+		return (malloc_error(*philos, *thread, *forks));
+	*forks = malloc(sizeof(pthread_mutex_t) * n);
+	if (!*forks)
+		return (malloc_error(*philos, *thread, *forks));
+	return (0);
 }
 
 int	main(int ac, char **av)
 {
-	t_arg		args;
-	t_philos	*philos;
+	t_arg			args;
+	t_philos		*philos;
+	pthread_t		*thread;
+	pthread_mutex_t	*forks;
 
-	if (ac == 5 || ac == 6)
+	if (ac < 5 || ac > 6 || init_info(ac, av, &args) == -1)
 	{
-		if (!parse(av) || !arg_to_int(av, &args))
-			return (0);
-		philos = (t_philos *)malloc(sizeof(t_philos)
-				* args.number_of_philosophers);
-		if (!philos)
-			return (write(1, "no memory allocated\n", 20));
-		if (init_philos(philos, args) || start_philos(philos))
-			return (0);
-		wait_philos(philos, args.number_of_philosophers);
-		ft_free(philos);
+		printf("Error\nInvalid arguments\n");
+		return (1);
 	}
-	else
-		printf("Error, not argument\n");
+	philos = NULL;
+	thread = NULL;
+	forks = NULL;
+	if (malloc_str(&philos, &thread, &forks, args.number_of_philosophers) == -1)
+		return (1);
+	init_philos(philos, &args);
+	take_forks(philos, forks, args.number_of_philosophers);
+	init_thread(philos, &args, thread);
+	destroy_mutex(&args, forks);
+	ft_free(philos, thread, forks);
+	return (0);
 }
